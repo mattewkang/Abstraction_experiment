@@ -1,0 +1,27 @@
+# catkin build outputs (src/ holds symlinks to the packages and is kept)
+catkin_ws/build/
+catkin_ws/devel/
+catkin_ws/install/
+catkin_ws/.catkin_tools/
+catkin_ws/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.venv/
+
+# Model weights / offline artifacts (fetched via fetch_weights.py, see config/model_weights.yaml)
+g1_arm_abs/models/
+g1_camera/models/
+
+# Logs, editor, OS
+*.log
+*.bag
+.vscode/
+.idea/
+*.swp
+.DS_Store

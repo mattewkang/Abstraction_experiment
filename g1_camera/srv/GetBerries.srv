@@ -1,0 +1,16 @@
+# Return every detected berry in one call (positions in base_link).
+# ripeness: optional filter ("" = all; "red" / "black" / "white" keeps only
+#           that ripeness). Only berries with valid depth are returned.
+string ripeness
+---
+bool success
+string frame_id
+int32 count
+# Parallel arrays, one entry per returned berry (length == count):
+float64[] x
+float64[] y
+float64[] z
+string[] ripeness_labels    # red / black / white
+float64[] det_scores        # detector confidence
+float64[] ripeness_scores   # classifier probability
+string message

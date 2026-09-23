@@ -1,0 +1,93 @@
+# Model weights pinned to a specific Hugging Face Hub commit (public repo, no token needed).
+# Updating a weight: push new file to HF, then bump hf_revision and sha256.
+# Downloaded by scripts/fetch_weights.py into g1_arm_abs/models/<filename>;
+# nested layout is preserved (not flattened) because the voxel A* backend
+# and the per-arm MLP loaders consume the subdirectory structure directly.
+# Per-entry `verify_sha256: false` opts the entry out of the startup-time
+# sha256 check (existence is still verified). Today voxel_config_bitmap_left
+# and voxel_config_bitmap_right are the only opt-outs, because reading
+# ~28 GB at every node startup adds ~30 s of latency. fetch_weights.py
+# ignores this flag and always sha256s after download.
+hf_repo: Mattewkang/Abstraction_experiment-arm-models
+hf_revision: 5144d5af2e642972a7900b6462655b0ba77a6e43
+weights:
+  voxel_config_bitmap_left:
+    filename: abstraction_map/voxel_config_bitmap_left.uint8
+    sha256: 5dbf8db99d8d4292bb221f35f8e72b34e51b4a533bc47c90775badb9753f3767
+    verify_sha256: false
+  voxel_config_bitmap_right:
+    filename: abstraction_map/voxel_config_bitmap_right.uint8
+    sha256: 07002931a0598492338f9d6efa07eb06723c4a71cc9cbe7e0c4c233a749ab557
+    verify_sha256: false
+  feasibility_mask_left:
+    filename: abstraction_map/feasibility_mask_left.uint8
+    sha256: 2dd3984067d77ca23432d5b739fd7c36776f071b8a027758f9beb4d9afc16379
+  feasibility_mask_right:
+    filename: abstraction_map/feasibility_mask_right.uint8
+    sha256: 4731519d9ac8d5632ceb0708375e188837e63881bd7994ad5b63ecad019e28fd
+  feasible_indices_left:
+    filename: abstraction_map/feasible_indices_left.int32
+    sha256: dd6a7d6f4bd12038b494dede716b05688ac754fedc8e2d8665463e94cbe813b4
+  feasible_indices_right:
+    filename: abstraction_map/feasible_indices_right.int32
+    sha256: d895c1139da0b2ee9601903d037e21ba814b28143b011a020bfdfa969675cc83
+  sparse_voxel_map_left:
+    filename: abstraction_map/sparse_voxel_map_left.int32
+    sha256: 9be06cbe2bdcedc823d3ad4dd5c84af2e6fd67bedb1407fc0987fddf98c3493e
+  sparse_voxel_map_right:
+    filename: abstraction_map/sparse_voxel_map_right.int32
+    sha256: b601089e68fbf482cd276ccda8dacf90e9f8c0f94856ecc45d3ac811f60b3c1d
+  voxel_phase2_left_log:
+    filename: abstraction_map/phase2_left_v1.log
+    sha256: 9a94236e1a95c2dfcd39583cabf9a137175dc70c9c9720bd47bfa291d07fb82d
+  voxel_phase2_right_log:
+    filename: abstraction_map/phase2_right_v1.log
+    sha256: b48da590789ccbad870abb9cfeaf48ae645c71aba2ade3fc396601181c49ce57
+  voxel_phase2_left_meta:
+    filename: abstraction_map/voxel_phase2_left.json
+    sha256: a5939c7f2a1a659716b7d24987164ad7038e02ff78a9f3f9c4ec01625b293c20
+  voxel_phase2_right_meta:
+    filename: abstraction_map/voxel_phase2_right.json
+    sha256: 50e7bc9a20d5ac633b4a971b511fd1873c14d2d5b56a796668d7b6d7169c09e3
+  grasp_bottle_left_model:
+    filename: grasp_bottle/left/best_model.pth
+    sha256: 0e1de5e222668789b043b7d948fa36f31400cdea4d1545e366ec4912d92c159a
+  grasp_bottle_left_scaler:
+    filename: grasp_bottle/left/x_scaler.pkl
+    sha256: dfc2da8ad931c3d1959d265d89cf489249c4f7004cb872c43041b43986108dc6
+  grasp_bottle_right_model:
+    filename: grasp_bottle/right/best_model.pth
+    sha256: 7a9e2b1a23a98ff72abce0744076a80a67660c220b088719389dbccaf5b88bec
+  grasp_bottle_right_scaler:
+    filename: grasp_bottle/right/x_scaler.pkl
+    sha256: 3b466885db1382123f9b1dcaaf37504e250803cf21d82bd61c39ab9ca24065ec
+  elevator_button_left_model:
+    filename: elevator_button/left/best_model.pth
+    sha256: 903aacc87071983d143b0b634fbd67645937a6e50ace2301de579d68b4995109
+  elevator_button_left_scaler:
+    filename: elevator_button/left/x_scaler.pkl
+    sha256: 6dbcab5acac076525f73966e1288ded4d5d0127c96f56c2c3f01d63742f32f28
+  elevator_button_left_config:
+    filename: elevator_button/left/config.json
+    sha256: 705c492eecab276408e08f2962214734ccb2c1c46cd4adc1457f0cd927cda444
+  elevator_button_right_model:
+    filename: elevator_button/right/best_model.pth
+    sha256: 0aa0574479e511eab37c33007e155cde01542fe0b8f570fca7f6c00b81abed8a
+  elevator_button_right_scaler:
+    filename: elevator_button/right/x_scaler.pkl
+    sha256: 499339358c7ee1d203537f965ab1befea04a6d2ed603b96aacea52213062cc7f
+  elevator_button_right_config:
+    filename: elevator_button/right/config.json
+    sha256: 9d6c63cd7f5c3579705ceb3ecb12e682fd9bf4f79ffede77c592cb62d5efa02d
+  grasp_berry_left_model:
+    filename: grasp_berry/left/best_model.pth
+    sha256: dabcb3f9f3f8ab212b7378e4fbbe7ec6b861513b5fdf03285ae9072dd743a225
+  grasp_berry_left_scaler:
+    filename: grasp_berry/left/x_scaler.pkl
+    sha256: 623a7c6cce359a3f5ebfebfbba84e9d53d710d36d4e40d59428467670cf92fa3
+  grasp_berry_right_model:
+    filename: grasp_berry/right/best_model.pth
+    sha256: 661eb178b3ce40151457462431ce25f3a2d49d4acce01c4ae972566a6c183235
+  grasp_berry_right_scaler:
+    filename: grasp_berry/right/x_scaler.pkl
+    sha256: 5a2f761ff219c558fb749ef58e023c34a6894223fd6b5681cf45cd68fbaa5b4a

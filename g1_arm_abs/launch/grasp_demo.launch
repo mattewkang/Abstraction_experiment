@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<!--
+新增文件（g1_grasp_ros 教学工程顶层 launch，原仓库无此文件；原仓库由
+main_process 编排各包的独立 launch）。
+
+一条命令拉起整个"视觉识别 -> 手臂控制 -> 灵巧手抓取"最小系统：
+
+  1. realsense2_camera/rs_camera.launch（apt 外部包，align_depth:=true）
+       -> /camera/color/image_raw
+          /camera/aligned_depth_to_color/image_raw
+          /camera/color/camera_info
+  2. g1_camera/object_detector.launch
+       -> /perception/get_object_position（YOLO + 深度反投影）
+  3. g1_hands/revo2_dual_hand_node.launch
+       -> /g1_hand_{left,right}/{pre_grasp,grasp_5f,release,...}
+  4. g1_arm_abs/arm_node_abs.launch
+       -> /g1_arm_simple/*（unitree_sdk2py DDS 控臂 + voxel A* 避障）
+
+深度话题链路核实：rs_camera.launch align_depth:=true 发布
+/camera/aligned_depth_to_color/image_raw 与 /camera/color/camera_info，
+与 arm_node_abs.launch 里 voxel adapter 的默认
+voxel_depth_topic / voxel_camera_info_topic 完全一致，无需改动。
+
+启动完成后执行演示：
+    rosservice call /g1_arm_simple/grasp_bottle
+    rosservice call /g1_arm_simple/pick_berry
+    rosservice call /g1_arm_simple/press_elevator_button "{arm: right, x: 0.35, y: -0.1, z: 0.2, pre_press_dx: 0, wait: true, timeout: 0}"
+
+体素 A* 避障默认开启（~use_astar_for_grasp 默认 true）：抓取的
+home->pregrasp 段由 A* 在头部相机深度障碍上规划。首个 plan 会 JIT
+编译 numba 内核并 memmap ~28GB bitmap，冷启动首次规划偏慢属正常。
+RViz（默认随 launch 打开）可在 /g1_arm_simple/voxel_obstacles 查看
+A* 正在避让的障碍点云。
+-->
+<launch>
+  <!-- Unitree DDS 网卡（也可用环境变量 G1_NETWORK_INTERFACE） -->
+  <arg name="network_interface" default="$(optenv G1_NETWORK_INTERFACE eth0)" />
+  <arg name="simulation_mode"   default="false" />
+
+  <!-- 各子系统开关：某个硬件缺席时可以单独关掉 -->
+  <arg name="bringup_camera" default="true" />
+  <arg name="bringup_hands"  default="true" />
+  <arg name="bringup_arm"    default="true" />
+  <!-- Berry detector (g1_camera/berry_detector.launch): serves
+       /perception/get_berries for /g1_arm_simple/pick_berry. On-demand, so
+       idle until called. Needs unified_detector_yolo11s.pt and
+       unified_classifier_yolo11s_cls.pt in g1_camera/models/ (fetched by
+       rosrun g1_camera fetch_weights.py); the node exits at startup if the
+       detector weight is missing, without affecting the other nodes. -->
+  <arg name="bringup_berry_detector" default="true" />
+
+  <!-- 透传给 arm_node_abs.launch：
+       publish_tf_stubs — base_link->torso_link identity 与
+         base_link->camera_link 外参 static TF（本工程无 g1_slam，
+         保持 true；若与其它发布这些 TF 的栈同跑则设 false）。
+       use_rviz — 随 launch 打开 voxel 障碍可视化 RViz；
+         SSH 无 X 环境请设 false。 -->
+  <arg name="publish_tf_stubs" default="true" />
+  <arg name="use_rviz"         default="true" />
+
+  <!-- 灵巧手串口（与 g1_hands 默认一致） -->
+  <arg name="right_hand_port" default="/dev/ttyUSB1" />
+  <arg name="left_hand_port"  default="/dev/ttyUSB0" />
+
+  <!-- grasp_bottle 向识别节点查询的 YOLO 类别名。
+       本工程 manifest 固定的 find_elevator_bottle.pt 类别为
+       {0: button, 1: drink_can}，没有 "bottle"；而 arm_node_abs.py 自身默认
+       是 "bottle"（对应原仓库 unified_detector_yolo11s.pt，该权重无 manifest
+       条目、fetch_weights.py 下不到）。默认改为 drink_can 与实际权重对齐，
+       否则 grasp_bottle 必然报
+         "No valid detection found for label 'bottle'"。 -->
+  <arg name="grasp_bottle_label" default="drink_can" />
+
+  <!-- 1. RealSense 驱动（apt: ros-noetic-realsense2-camera）。
+       align_depth:=true 产生 /camera/aligned_depth_to_color/image_raw，
+       识别节点的深度反投影与 voxel A* 障碍体素都依赖它。 -->
+  <include if="$(arg bringup_camera)"
+           file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true" />
+  </include>
+
+  <!-- 2. 目标识别（YOLO + 深度 -> base_link 3D 坐标服务）。
+       object_detector.launch also loads the button classifier used by
+       /g1_arm_simple/press_elevator_button (fine labels up/down/B1..B6/...). -->
+  <include if="$(arg bringup_camera)"
+           file="$(find g1_camera)/launch/object_detector.launch" />
+
+  <!-- 2b. Berry detector (/perception/get_berries, used by pick_berry) -->
+  <include if="$(arg bringup_berry_detector)"
+           file="$(find g1_camera)/launch/berry_detector.launch" />
+
+  <!-- 3. 双手 Revo2 灵巧手节点 -->
+  <include if="$(arg bringup_hands)"
+           file="$(find g1_hands)/launch/revo2_dual_hand_node.launch">
+    <arg name="right_port" value="$(arg right_hand_port)" />
+    <arg name="left_port"  value="$(arg left_hand_port)" />
+  </include>
+
+  <!-- 4. 手臂控制节点（g1_arm_simple，voxel A* 默认开启） -->
+  <include if="$(arg bringup_arm)"
+           file="$(find g1_arm_abs)/launch/arm_node_abs.launch">
+    <arg name="network_interface" value="$(arg network_interface)" />
+    <arg name="simulation_mode"   value="$(arg simulation_mode)" />
+    <arg name="publish_tf_stubs"  value="$(arg publish_tf_stubs)" />
+    <arg name="rviz"              value="$(arg use_rviz)" />
+    <arg name="grasp_bottle_label" value="$(arg grasp_bottle_label)" />
+  </include>
+</launch>

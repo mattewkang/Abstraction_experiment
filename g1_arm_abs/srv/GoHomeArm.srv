@@ -1,0 +1,16 @@
+string arm
+
+# Tri-state A* override for this call. Same enum values as
+# PlanGraspFromPointRequest so callers can reuse their existing param
+# mapping. Default lets ~use_astar_for_go_home decide; FORCE_OFF makes
+# the handler bypass A* and command the home joint vector directly
+# (useful when the post-release / post-handover arm pose is far from
+# the A* grid and routinely fails priority A*).
+uint8 ASTAR_USE_DEFAULT = 0
+uint8 ASTAR_FORCE_ON    = 1
+uint8 ASTAR_FORCE_OFF   = 2
+uint8 astar_override
+
+---
+bool success
+string message

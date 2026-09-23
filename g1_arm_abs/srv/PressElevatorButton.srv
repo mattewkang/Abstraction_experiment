@@ -1,0 +1,71 @@
+# Press an elevator button at the given xyz with the chosen arm.
+#
+# Two-leg pipeline (mirrors the grasp action):
+#   1) Pre-press point = (x - pre_press_dx, y, z) with the same rx, rz as
+#      the press point. A* plans current -> pre_press_joints.
+#   2) Direct multi-waypoint motion pre_press_joints -> mid_press[1..4] ->
+#      press_joints (4 evenly-spaced intermediates at cartesian fractions
+#      1/5..4/5 along pre_press -> press). No A* on this leg.
+#
+# rx is fixed per arm (left=+90 deg, right=-90 deg) and rz is derived from
+# xyz using the same rule as the grasp pose (atan2 with +/-0.17 y offset).
+# The hand is put into the point gesture (index + middle extended) before
+# the arm moves so the finger is in the pressing pose when execution
+# starts.
+
+string arm    # "left" or "right"
+float64 x     # press point (button face) x in base frame, meters
+float64 y     # press point (button face) y in base frame, meters
+float64 z     # press point (button face) z in base frame, meters
+
+# Pull-back distance (meters) along -x for the pre-press point relative to
+# the press point. <=0 -> fall back to the node-side default
+# (~press_elevator_button_default_pre_press_dx, currently 0.05 m = 5 cm).
+# This default is the single source of truth; main_process and action_map
+# entries pass 0 unless they want to override per-call.
+# The pre-press point is the A* goal; the press point is reached via a
+# single direct waypoint from the pre-press configuration.
+float64 pre_press_dx
+
+# Optional wait + timeout for the underlying motion. Same semantics as
+# MoveArmJoints: wait=true blocks until the controller reports reached;
+# timeout<=0 falls back to ~default_timeout on arm_abs_node.
+bool wait
+float64 timeout
+
+---
+bool success
+string message
+
+# Echo of the inputs for debugging.
+string arm_used
+float64[] target_xyz       # [x, y, z] of the press point (button face)
+
+# rx is fixed per arm (radians) and rz is computed (radians); reported
+# back so the operator can audit what the IK actually saw.
+float64 rx_rad
+float64 rz_rad
+
+# 5-pose [x, y, z, rx_rad, rz_rad] fed into the elevator-button MLP for
+# the press point.
+float64[] mlp_input_pose5
+
+# Predicted joint angles (radians, 5 DOF, possibly clipped to limits) at
+# the press point (button face) -- the final IK target.
+float64[] target_joint_angles
+
+# Predicted joint angles (radians, 5 DOF, possibly clipped to limits) at
+# the pre-press point -- the A* goal and start of the direct press leg.
+float64[] pre_press_joint_angles
+
+# Path executed:
+#   pre_path  : A* trajectory current -> pre_press_joints (multi-waypoint).
+#   press_path: direct leg pre_press_joints -> press_joints (single waypoint).
+# Both are flat N*5 floats.
+float64[] pre_path_flat
+int32 pre_waypoint_count
+float64[] press_path_flat
+int32 press_waypoint_count
+
+# Joint state at the end of execution.
+float64[] final_joint_angles

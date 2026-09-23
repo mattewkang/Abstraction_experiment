@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>g1_camera</name>
+  <version>0.1.0</version>
+  <description>
+    Head-camera object detection and 3D localization for the Unitree G1.
+    Runs YOLO against the RealSense D435i color + aligned depth topics,
+    optionally refines `button` detections with an elevator-button
+    classifier, and serves ranked detections in the robot base_link frame
+    via /perception/get_object_position. A separate on-demand berry
+    detector (ripeness classifier + colour-aware depth) serves
+    /perception/get_berries for the arm's pick_berry flow.
+  </description>
+
+  <maintainer email="rohanhong@outlook.com">Rohan</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>message_runtime</build_export_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

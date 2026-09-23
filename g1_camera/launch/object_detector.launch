@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  Detector node entry point. remote_camera is a deployment marker (camera on
+  PC2, time-synced to PC1 via chrony); it does NOT switch topics. All inputs
+  are the raw RealSense topics; cross-host clock alignment is handled at the OS
+  level by chrony (g1_perception/scripts/setup_remote_timesync.sh), not by any
+  in-ROS re-stamping. Mirrors g1_slam/launch/slam_session.launch.
+-->
+<launch>
+  <arg name="params" default="$(find g1_camera)/config/params.yaml"/>
+  <arg name="remote_camera" default="false"/>
+  <arg name="output" default="screen"/>
+
+  <!-- remote_camera no longer switches topics (chrony aligns the clock at the
+       OS level; the *_synced re-stamped variants were removed). Inputs are the
+       raw RealSense topics in all modes. -->
+  <arg name="rgb_topic"   default="/camera/color/image_raw"/>
+  <arg name="depth_topic" default="/camera/aligned_depth_to_color/image_raw"/>
+  <arg name="info_topic"  default="/camera/color/camera_info"/>
+
+  <node pkg="g1_camera" type="object_detector_node.py"
+        name="object_detector_node" output="$(arg output)">
+    <rosparam command="load" file="$(arg params)"/>
+    <param name="rgb_topic"   value="$(arg rgb_topic)"/>
+    <param name="depth_topic" value="$(arg depth_topic)"/>
+    <param name="info_topic"  value="$(arg info_topic)"/>
+  </node>
+</launch>

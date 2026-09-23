@@ -1,0 +1,77 @@
+# Parameters for berry_detector_node.
+
+# YOLO weights (ultralytics, torch).
+#   unified_detector_yolo11s.pt        -> detect: button / bottle / berry
+#   unified_classifier_yolo11s_cls.pt  -> classify: button fine classes +
+#                                         berry ripeness (black / red / white)
+model: models/unified_detector_yolo11s.pt
+classifier: models/unified_classifier_yolo11s_cls.pt
+conf_threshold: 0.25
+iou_threshold: 0.45
+device: cpu                 # "cpu", "cuda:0", or a CUDA index; CPU-only while the GX10 power fault makes GPU load power-cut the machine
+
+# Frames
+# Emitted frame for every berry position. torso_link is the URDF frame the
+# arm picker (g1_arm_abs) plans in; in this project's convention g1_camera's
+# base_link IS the same physical frame as torso_link, so the analytic extrinsic
+# below (identical to config/params.yaml) is unchanged — only the emitted label
+# differs from object_detector_node, which still tags base_link.
+base_frame: torso_link
+camera_optical_frame: camera_color_optical_frame
+
+# Extrinsic (values mirror config/params.yaml; keep in sync with the calibration
+# truth-of-record in g1_slam URDF + transforms.launch).
+# base_link(==torso_link) -> camera_link translation.
+camera_translation: [0.0576235, 0.02753, 0.44487]
+# [yaw, pitch, roll] in radians.
+camera_rotation_ypr: [0.0, 0.8307767239493009, 0.0]
+
+# Depth handling
+depth_scale: 0.001          # RealSense aligned depth is uint16 in mm
+min_depth: 0.15
+max_depth: 5.0
+depth_patch_radius: 3
+# Depth frames median-stacked per call to kill single-frame RealSense noise
+# (a stationary berry's z otherwise wobbles several mm/cm). 1 = single frame
+# (legacy); 5 @15 fps adds ~0.3 s latency. Raise for more stability.
+depth_temporal_frames: 5
+# Ray-direction shift from front surface to berry centre. 0.005 = 1 cm berry.
+berry_radius_m: 0.005
+
+# Residual-calibration trim, SUBTRACTED from the base-frame position.
+# x_offset 0.02 cancels the measured +2 cm forward bias; tune y/z if needed.
+x_offset: 0.02
+y_offset: 0.0
+z_offset: 0.0
+
+# Colour-aware depth alignment. Case 1: when the bbox centre matches the
+# predicted ripeness colour (a patch majority, see color_center_frac), sample
+# depth at the centre directly. Case 2: when it does not (leaf in front of the
+# berry) or the centre has no depth, hop the sample to the centre of the LARGEST
+# connected colour-matching region in the bbox. Needs the classifier.
+color_align: true
+color_min_pixels: 15        # min valid-depth pixels in the region to trust it
+color_center_frac: 0.5      # centre-patch colour fraction for "centre on berry"
+
+# Crop padding before the ripeness classifier (YOLO bboxes are tight).
+classifier_pad_frac: 0.10
+
+# Topics
+rgb_topic: /camera/color/image_raw
+depth_topic: /camera/aligned_depth_to_color/image_raw
+info_topic: /camera/color/camera_info
+
+# Output
+berries_pose_topic: /perception/berries_pose
+berries_json_topic: /perception/berries_json
+annotated_topic: /perception/berries_annotated_image
+publish_annotated: true
+
+# Per-service-call timeout (s) for each wait_for_message (RGB, depth).
+# Raised for the remote-camera deployment: each call opens a fresh subscription
+# over the network and the 1280x720 frames can take >2 s to arrive on the first
+# message, which overruns a 1.0 s local-camera timeout.
+service_frame_timeout_sec: 5.0
+
+# Service name (returns ALL berries in one call).
+get_berries_service: /perception/get_berries

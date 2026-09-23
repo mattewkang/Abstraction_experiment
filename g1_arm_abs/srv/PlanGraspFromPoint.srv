@@ -1,0 +1,57 @@
+string arm
+float64 x
+float64 y
+float64 z
+
+# 0 -> use ~pre_to_target_waypoint_count on arm_abs_node; otherwise override for this call.
+int32 pre_to_target_waypoint_count
+
+# Tri-state A* override for this call:
+#   0 = use ~use_astar_for_grasp
+#   1 = force A* on
+#   2 = force A* off
+uint8 ASTAR_USE_DEFAULT = 0
+uint8 ASTAR_FORCE_ON    = 1
+uint8 ASTAR_FORCE_OFF   = 2
+uint8 astar_override
+
+---
+bool success
+string message
+
+# End-effector 5-pose at each stop. Both are [x, y, z, rx, rz].
+float64[] pregrasp_pose
+float64[] grasp_pose
+
+# NN-inferred 5-joint targets (radians).
+float64[] pregrasp_joint_angles
+float64[] grasp_joint_angles
+
+# Waypoints from current arm state to pregrasp (A* or single-target fallback).
+# Flat: N * 5 floats; iterate in 5-tuples.
+float64[] pre_path_flat
+int32 pre_waypoint_count
+
+# Waypoints from pregrasp to grasp (Cartesian horizontal interp; last is grasp_joints).
+# Flat: M * 5 floats.
+float64[] target_path_flat
+int32 target_waypoint_count
+
+# Lift-joint target (5 floats) computed at (~lift_x, ~lift_y, ~lift_z). Empty if disabled/unsolvable.
+float64[] lift_joint_angles
+
+# Post-lift retraction joint target (5 floats). Computed by keeping the
+# grasp orientation (rx, rz), dropping z back to the original target
+# point's z (the bottle z reported by the camera), and sliding in the
+# opposite-yaw direction (-cos(rz), -sin(rz), 0) until x reaches
+# ~retract_x_target (default 0.15 m). Empty if ~retract_after_grasp is
+# false, the geometry doesn't admit a positive retraction step (e.g. the
+# gripper is roughly perpendicular to the x-axis, or lift_x is already
+# past the target), or the IK is unsolvable.
+float64[] retract_joint_angles
+
+# Home joint target (5 floats) for `arm`, sourced from
+# ~{arm}_home_joints_deg and converted to radians. Returned in the plan
+# so the orchestrator can drive the final return-to-home leg without
+# loading the home param itself or running another IK call.
+float64[] home_joint_angles

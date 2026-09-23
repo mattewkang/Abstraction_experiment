@@ -1,0 +1,13 @@
+string arm
+float64 x
+float64 y
+float64 z
+---
+bool success
+string message
+
+float64[] pregrasp_pose
+float64[] grasp_pose
+
+float64[] pregrasp_joint_angles
+float64[] grasp_joint_angles

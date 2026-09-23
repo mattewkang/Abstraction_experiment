@@ -1,0 +1,50 @@
+# Plan a collision-free joint-space path from the current arm pose to a
+# 5-D Cartesian end-effector pose (no grasp-specific pregrasp / grasp_5f
+# coupling). Reuses the same NN IK + A* + voxel obstacle infrastructure
+# the grasp planner uses, so the handover / generic "move arm to pose"
+# leg is checked for joint limits and obstacles in exactly the same way
+# as plan_grasp_from_point's pre_path.
+#
+# Orchestrators (main_process) drive the returned waypoints through the
+# existing move_arm_joints service. No motion happens inside this call.
+
+string  arm                       # "left" | "right"
+float64 x                         # torso/base frame target (m)
+float64 y
+float64 z
+
+# Optional orientation override (rad). Pass NaN on both to let the
+# handler derive the NN-style yaw: rx = 0, rz = atan2(y + sign*0.16, x)
+# (sign = +1 for right arm, -1 for left). This matches the convention
+# used inside compute_grasp_and_pregrasp so the IK input distribution
+# stays aligned with the grasp NN's training data.
+float64 rx
+float64 rz
+
+# Tri-state A* override, same enum values as PlanGraspFromPointRequest.
+# 0 -> respect ~use_astar_for_grasp on arm_abs_node
+# 1 -> force A* on  (voxel adapter if available, otherwise reachable map)
+# 2 -> force A* off (single-target fallback; no obstacle avoidance)
+uint8 ASTAR_USE_DEFAULT = 0
+uint8 ASTAR_FORCE_ON    = 1
+uint8 ASTAR_FORCE_OFF   = 2
+uint8 astar_override
+
+---
+
+bool   success
+string message
+
+# NN-IK joint vector at the target pose, clipped to joint limits (radians).
+# 5 floats. Empty on failure.
+float64[] target_joint_angles
+
+# Effective 5-D pose that was solved against, post compensation / yaw
+# derivation. [x, y, z, rx, rz]. Empty on failure.
+float64[] target_pose
+
+# Waypoints from the current arm pose to target_joint_angles (A* path
+# if enabled, single-target fallback otherwise). Flat: N * 5 floats;
+# iterate in 5-tuples. Identical packing to PlanGraspFromPoint.pre_path_flat.
+float64[] pre_path_flat
+int32     pre_waypoint_count

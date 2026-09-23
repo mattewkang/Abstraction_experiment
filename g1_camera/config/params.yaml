@@ -1,0 +1,136 @@
+# Parameters for object_detector_node
+
+# YOLO model weights (ultralytics).
+# (Names are case-sensitive: target_classes and the label passed to
+# /perception/get_object_position must match exactly, including capitalization.)
+# Default is find_elevator_bottle.pt (measured classes: 0:button 1:drink_can).
+# unified_detector_yolo11s.pt (0:button 1:bottle 2:berry) is also fetched by
+# fetch_weights.py (the berry detector uses it); to run grasp_bottle against
+# it instead, point `model` at it and set grasp_bottle_label:=bottle on the
+# arm launch.
+model: models/find_elevator_bottle.pt
+conf_threshold: 0.40
+iou_threshold: 0.45
+# Empty list keeps every class the model emits (button, drink_can for
+# find_elevator_bottle.pt). Populate it to restrict detection to specific classes.
+target_classes: []
+
+# How /perception/get_object_position(label, index) ranks valid detections
+# when more than one matches the requested label:
+#   z_desc     -- physically highest first (index 0 = upper button / shelf)
+#   z_asc      -- physically lowest first  (index 0 = lower button / floor)
+#   score_desc -- highest YOLO confidence first (legacy behaviour)
+# All sorts are tie-broken by descending score so duplicate-z hits are
+# deterministic.
+sort_by: z_desc
+device: cpu                 # "cpu", "cuda:0", or a CUDA index (0, 1, ...); CPU-only while the GX10 power fault makes GPU load power-cut the machine
+
+# Frames
+base_frame: base_link
+camera_optical_frame: camera_color_optical_frame
+
+# Static TF broadcast.
+# This project has no other TF consumer (the detector projects with the
+# analytic extrinsic below and never queries the TF tree), so leave false.
+publish_static_tf: false
+
+# base_link -> camera_link translation.
+# Constant offsets in detected positions indicate a translation error;
+# distance-dependent errors indicate a rotation error, so retune
+# camera_rotation_ypr (pitch / yaw) rather than touching translation.
+camera_translation: [0.0576235, 0.02753, 0.44487]
+# [yaw, pitch, roll] in radians
+camera_rotation_ypr: [0.0, 0.8307767239493009, 0.0]
+
+# Depth handling
+depth_scale: 0.001          # RealSense aligned depth is uint16 in mm
+min_depth: 0.15             # metres, ignore below
+max_depth: 5.0              # metres, ignore above
+depth_patch_radius: 3       # sample median over a (2r+1)^2 patch at bbox centre
+bottle_radius_m: 0.05      # shift front-surface depth to bottle centre
+
+# Per-class override of the ray-direction offset applied to the returned
+# point (so the press / pick target sits where you actually want it):
+#   button       -> 0.0 (flat panel; surface IS the press target)
+#   bottle    -> inherits bottle_radius_m (round object; front surface -> centre)
+#   up/down/1/B1.../   -> 0.0 (fine classes the button_classifier renames
+#   open/close/             a coarse button label to once prob >= button_classifier_conf;
+#   emergency_yellow/       without these entries the renamed labels would
+#   phone                   fall back to bottle_radius_m and be pushed
+#                           5 cm behind the panel surface).
+# Anything not listed here falls back to bottle_radius_m.
+class_radius_m:
+  button:           0.0
+  # Fine button classes (button_classifier outputs).
+  up:               0.0
+  down:             0.0
+  "1":              0.0
+  B1:               0.0
+  B2:               0.0
+  B3:               0.0
+  B4:               0.0
+  B5:               0.0
+  B6:               0.0
+  open:             0.0
+  close:            0.0
+  emergency_yellow: 0.0
+  phone:            0.0
+
+# Topics
+rgb_topic: /camera/color/image_raw
+depth_topic: /camera/aligned_depth_to_color/image_raw
+info_topic: /camera/color/camera_info
+
+# Output
+annotated_topic: /perception/annotated_image
+publish_annotated: true
+# Cold-start only: how long a service call waits for the FIRST frame when the
+# cache is still empty. RGB/depth are streamed and cached continuously, so a
+# steady-state call never waits here.
+service_frame_timeout_sec: 1.0
+
+# Background inference rate (Hz). The node subscribes to RGB + depth
+# continuously and re-runs detection on a timer, so annotated_image /
+# objects_pose / objects_json stay live and get_object_position answers from
+# an already-computed result instead of blocking the caller.
+# 0 disables the timer and restores on-demand-only inference (the frame cache
+# stays active either way, which is what makes the service robust to a slow
+# or hiccuping camera stream).
+# Cost measured on this machine: ~82 ms per pass at 1280x720 on CPU, so 5 Hz
+# is roughly 40% of one core-set. Raise only with headroom to spare.
+inference_rate_hz: 5.0
+
+# Safety gate: refuse detections derived from a frame older than this. The
+# returned xyz drives a real arm motion, so a cached-but-stale frame must
+# never be answered with -- if the camera stalls, the service fails loudly
+# ("last camera frame is N.Ns old - camera stalled?") instead of sending the
+# gripper to where the object used to be.
+max_frame_age_sec: 1.0
+
+# RGB and depth are cached independently, so their stamps can differ. Warn
+# (throttled) past this skew; the pixel -> depth lookup assumes both frames
+# describe the same instant.
+max_rgb_depth_skew_sec: 0.2
+
+# Button-crop classifier (optional; needed by the elevator-button press flow).
+# Runs on every `button` detection and classifies into:
+#   up, down, 1, B1, B2, B3, B4, B5, B6, open, close, emergency_yellow, phone.
+# Set to "" to disable; `button` labels stay unchanged.
+# When the predicted probability >= button_classifier_conf the primary
+# label is replaced with the fine class, so /perception/get_object_position
+# can be called with label: "up" / "B2" / "open" etc. Below the threshold,
+# label stays "button" and the fine prediction is still recorded
+# in detections[i].button_class / button_class_score for downstream review.
+# button_cls.pt is manifest-pinned (config/model_weights.yaml) and fetched by
+# fetch_weights.py; a missing or sha-drifted file is a FATAL at startup.
+button_classifier: models/button_cls.pt
+# Fraction of bbox width/height to pad outward before classification.
+# YOLO bboxes are tight; the classifier was trained on crops with more
+# context. 0.15 is a reasonable default; raise to 0.25 if confidences
+# are low. Going much higher lets neighboring buttons leak into the crop.
+button_classifier_pad_frac: 0.15
+# Minimum classifier probability to replace the primary label. Below this,
+# label stays "button" and the fine prediction is recorded in
+# detections[i].button_class / button_class_score. Tune against live
+# frames; lower it if domain shift drives confidences down.
+button_classifier_conf: 0.15

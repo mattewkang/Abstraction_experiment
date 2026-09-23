@@ -1,0 +1,184 @@
+<?xml version="1.0"?>
+<!--
+Launch g1_arm_abs/scripts/arm_node_abs.py (node name: g1_arm_simple)
+-->
+<launch>
+  <arg name="network_interface" default="$(optenv G1_NETWORK_INTERFACE eth0)" />
+  <arg name="simulation_mode" default="false" />
+  <arg name="motion_mode" default="true" />
+  <arg name="debug" default="false" />
+  <!-- SDK takeover / hand-back: the arms stay under the robot's own
+       controller (arm swing) until a motion service takes them over; the
+       orchestrator hands them back via ~release_arm_control when the task
+       is done. Both weight ramps last control_switch_delay seconds and
+       are followed by a control_switch_settle hold before the next
+       command (SDK target or native gait) may start. -->
+  <arg name="control_switch_delay" default="0.5" />
+  <arg name="control_switch_settle" default="0.5" />
+  <arg name="release_arm_control_after_init_home" default="true" />
+  <!-- release_arm_control refuses unless both arms measure within this
+       per-joint tolerance (rad) of ~{arm}_home_joints_deg. -->
+  <arg name="release_arm_control_require_home" default="true" />
+  <arg name="release_arm_control_home_tolerance" default="0.15" />
+
+  <!--
+    A* planner: voxel-based obstacle-aware backend driven by the live
+    aligned-depth stream from the head camera.
+    Prereq (run once):
+      python3 $(find g1_arm_abs)/src/g1_arm_abs/voxel_planner_deploy/decompress_once.py
+    If the decompressed bitmaps are missing the node aborts at startup.
+  -->
+
+  <!-- Voxel-backend tuning. -->
+  <arg name="voxel_output_dir"                default="" />
+  <arg name="voxel_depth_topic"               default="/camera/aligned_depth_to_color/image_raw" />
+  <arg name="voxel_camera_info_topic"         default="/camera/color/camera_info" />
+  <arg name="voxel_depth_scale"               default="0.001" />
+  <arg name="voxel_min_depth"                 default="0.15" />
+  <arg name="voxel_max_depth"                 default="2.5" />
+  <arg name="voxel_subsample_stride"          default="4" />
+  <!-- Camera extrinsic defaults mirror g1_camera/config/params.yaml
+       (base_link -> camera_link). Keeping them aligned means A* obstacles
+       land where object_detector_node places the detected object. -->
+  <arg name="voxel_camera_translation"        default="[0.0576235, 0.01753, 0.42987]" />
+  <arg name="voxel_camera_rotation_ypr"       default="[0.0, 0.8307767239493009, 0.0]" />
+  <!-- obstacle_frame_offset is the extra translation from the adapter's
+       "root" frame (where camera_translation is measured) to the planner's
+       obstacle frame. In this project's convention g1_camera's base_link
+       IS the URDF's torso_link (same physical frame, different label), so
+       no shift is needed here. Keep zero unless the camera extrinsics
+       switch to a different root frame. -->
+  <arg name="voxel_obstacle_frame_offset"     default="[0.0, 0.0, 0.0]" />
+  <arg name="voxel_defer_joint"               default="2" />
+  <arg name="voxel_defer_cost_mult"           default="2.0" />
+  <arg name="voxel_h_weight"                  default="1.0" />
+  <!-- voxel_shortcut: when true, A* detour paths are collapsed via
+       compress_path_linecheck (voxel_phase4_astar.py:148). That helper
+       samples the joint-space line with np.rint, which skips neighbour
+       cells on diagonal moves and can declare a shortcut "clear" even
+       though the interpolated motion clips an obstacle voxel. Observed
+       failure mode: A* produces ~16-waypoint avoidance, shortcut flattens
+       it to 2 waypoints, arm collides. Kept off by default until the
+       shortcut uses a conservative sweep check. -->
+  <arg name="voxel_shortcut"                  default="false" />
+  <arg name="voxel_warmup_on_start"           default="false" />
+
+  <!-- RViz visualization of the voxel obstacles the A* is avoiding. -->
+  <arg name="voxel_publish_obstacles"         default="true" />
+  <arg name="voxel_obstacles_topic"           default="/g1_arm_simple/voxel_obstacles" />
+  <arg name="voxel_obstacles_frame"           default="torso_link" />
+
+  <!-- Debug: when true, plan_grasp_from_point logs both the WITH-voxel and
+       WITHOUT-voxel pre_path joint sequences side-by-side. Logging-only;
+       does not affect what the service returns. -->
+  <arg name="debug_print_both_paths"          default="false" />
+
+  <!-- Press-specific workspace bounds. The press pipeline gates its
+       waypoints against these instead of the grasp ~workspace_max_x /
+       ~workspace_min_z, so a forward-mounted elevator button can be reached
+       without relaxing the grasp gate. max_x is raised above the grasp
+       default (0.39) so the press fingertip can reach farther forward; keep
+       it at or below the voxel A* grid edge (x <= 0.6 in torso_link) or the
+       planner cannot represent the goal cell. min_z mirrors the grasp
+       default. -->
+  <arg name="press_elevator_button_workspace_max_x" default="0.45" />
+  <arg name="press_elevator_button_workspace_min_z" default="-0.02" />
+
+  <!-- YOLO class name grasp_bottle asks the detector for.
+       arm_node_abs.py's own default is "bottle" (params.py), which matches the
+       original repo's unified_detector_yolo11s.pt (0:button 1:bottle 2:berry).
+       That weight has no manifest entry and cannot be fetched, so this project
+       ships find_elevator_bottle.pt instead - whose classes are
+       {0: button, 1: drink_can}, with NO "bottle". Asking for "bottle" against
+       the shipped weight always fails with
+         "get_object_position failed: No valid detection found for label 'bottle'"
+       so the default is overridden here to match the weight actually installed.
+       Set grasp_bottle_label:=bottle if you hand-copy unified_detector_yolo11s.pt
+       into g1_camera/models/ and repoint g1_camera/config/params.yaml at it. -->
+  <arg name="grasp_bottle_label" default="drink_can" />
+
+  <!-- Auto-launch RViz with the voxel-obstacle display preconfigured.
+       Set rviz:=false when running headless (over SSH without X). -->
+  <arg name="rviz"                            default="true" />
+  <arg name="rviz_config"                     default="$(find g1_arm_abs)/config/voxel_obstacles.rviz" />
+
+  <!-- Stub static TF so RViz can use torso_link as its Fixed Frame.
+       robot_state_publisher isn't launched anywhere in this repo, so
+       without this the voxel_obstacles cloud (frame_id=torso_link) has
+       nowhere to be rendered. Parent defaults to base_link to match
+       g1_camera/config/params.yaml (base_frame: base_link). Disable
+       (publish_tf_stubs:=false) if another stack (SLAM, URDF) already
+       publishes these frames. -->
+  <arg name="publish_tf_stubs"                default="true" />
+  <arg name="tf_root_frame"                   default="base_link" />
+  <arg name="tf_camera_frame"                 default="camera_link" />
+  <!-- Values mirror g1_camera/config/params.yaml so TF matches the
+       extrinsics the perception stack already assumes. -->
+  <arg name="tf_camera_translation_x"         default="0.0576235" />
+  <arg name="tf_camera_translation_y"         default="0.01753" />
+  <arg name="tf_camera_translation_z"         default="0.42987" />
+  <arg name="tf_camera_yaw"                   default="0.0" />
+  <arg name="tf_camera_pitch"                 default="0.8307767239493009" />
+  <arg name="tf_camera_roll"                  default="0.0" />
+
+  <node pkg="g1_arm_abs"
+        type="arm_node_abs.py"
+        name="g1_arm_simple"
+        output="screen">
+    <param name="network_interface" value="$(arg network_interface)" />
+    <param name="simulation_mode" value="$(arg simulation_mode)" />
+    <param name="motion_mode" value="$(arg motion_mode)" />
+    <param name="debug" value="$(arg debug)" />
+    <param name="control_switch_delay" value="$(arg control_switch_delay)" />
+    <param name="control_switch_settle" value="$(arg control_switch_settle)" />
+    <param name="release_arm_control_after_init_home" value="$(arg release_arm_control_after_init_home)" />
+    <param name="release_arm_control_require_home" value="$(arg release_arm_control_require_home)" />
+    <param name="release_arm_control_home_tolerance" value="$(arg release_arm_control_home_tolerance)" />
+
+    <param name="voxel_output_dir"             value="$(arg voxel_output_dir)" />
+    <param name="voxel_depth_topic"            value="$(arg voxel_depth_topic)" />
+    <param name="voxel_camera_info_topic"      value="$(arg voxel_camera_info_topic)" />
+    <param name="voxel_depth_scale"            value="$(arg voxel_depth_scale)" />
+    <param name="voxel_min_depth"              value="$(arg voxel_min_depth)" />
+    <param name="voxel_max_depth"              value="$(arg voxel_max_depth)" />
+    <param name="voxel_subsample_stride"       value="$(arg voxel_subsample_stride)" />
+    <rosparam param="voxel_camera_translation"     subst_value="true">$(arg voxel_camera_translation)</rosparam>
+    <rosparam param="voxel_camera_rotation_ypr"    subst_value="true">$(arg voxel_camera_rotation_ypr)</rosparam>
+    <rosparam param="voxel_obstacle_frame_offset"  subst_value="true">$(arg voxel_obstacle_frame_offset)</rosparam>
+    <param name="voxel_defer_joint"            value="$(arg voxel_defer_joint)" />
+    <param name="voxel_defer_cost_mult"        value="$(arg voxel_defer_cost_mult)" />
+    <param name="voxel_h_weight"               value="$(arg voxel_h_weight)" />
+    <param name="voxel_shortcut"               value="$(arg voxel_shortcut)" />
+    <param name="voxel_warmup_on_start"        value="$(arg voxel_warmup_on_start)" />
+    <param name="voxel_publish_obstacles"       value="$(arg voxel_publish_obstacles)" />
+    <param name="voxel_obstacles_topic"         value="$(arg voxel_obstacles_topic)" />
+    <param name="voxel_obstacles_frame"         value="$(arg voxel_obstacles_frame)" />
+    <param name="debug_print_both_paths"        value="$(arg debug_print_both_paths)" />
+    <param name="press_elevator_button_workspace_max_x" value="$(arg press_elevator_button_workspace_max_x)" />
+    <param name="press_elevator_button_workspace_min_z" value="$(arg press_elevator_button_workspace_min_z)" />
+    <param name="grasp_bottle_label" value="$(arg grasp_bottle_label)" />
+  </node>
+
+  <!-- base_link -> torso_link: identity. In this project g1_camera's
+       base_link label refers to the same physical frame as the URDF's
+       torso_link (the extrinsics in g1_camera/config/params.yaml are
+       measured from torso_link). So no shift here; the TF just exposes
+       torso_link as a usable frame for RViz Fixed Frame. -->
+  <node if="$(arg publish_tf_stubs)"
+        pkg="tf2_ros" type="static_transform_publisher"
+        name="torso_link_tf_stub"
+        args="0 0 0 0 0 0 $(arg tf_root_frame) $(arg voxel_obstacles_frame)" />
+
+  <!-- base_link -> camera_link: values from g1_camera/config/params.yaml
+       (camera_translation + camera_rotation_ypr). RealSense driver
+       supplies camera_link -> camera_color_optical_frame, so this one
+       transform completes the chain for viewing RealSense topics in
+       RViz under Fixed Frame=base_link or torso_link. -->
+  <node if="$(arg publish_tf_stubs)"
+        pkg="tf2_ros" type="static_transform_publisher"
+        name="camera_link_tf_stub"
+        args="$(arg tf_camera_translation_x) $(arg tf_camera_translation_y) $(arg tf_camera_translation_z) $(arg tf_camera_yaw) $(arg tf_camera_pitch) $(arg tf_camera_roll) $(arg tf_root_frame) $(arg tf_camera_frame)" />
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="voxel_obstacles_rviz"
+        args="-d $(arg rviz_config)" output="screen" />
+</launch>

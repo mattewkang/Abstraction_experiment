@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>g1_hands</name>
+  <version>0.1.0</version>
+  <description>
+    ROS 1 (Noetic) drivers for the BrainCo Revo2 tactile dexterous hands on
+    the Unitree G1 humanoid (trimmed teaching build). Each hand runs as its
+    own node over its own USB / RS-485 Modbus bus and exposes pre-grasp,
+    5-finger grasp, release, point-gesture and berry-gesture Trigger
+    services plus a per-hand TactileStatus publisher. The tactile
+    auto-release monitor is removed in this build.
+  </description>
+
+  <maintainer email="rohanhong@outlook.com">Rohan</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>std_srvs</build_depend>
+  <build_depend>message_generation</build_depend>
+
+  <build_export_depend>rospy</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>std_srvs</build_export_depend>
+  <build_export_depend>message_runtime</build_export_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

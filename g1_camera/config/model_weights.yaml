@@ -1,0 +1,18 @@
+# Model weights pinned to a specific Hugging Face Hub commit (public repo, no token needed).
+# Updating a weight: push new file to HF, then bump hf_revision and sha256.
+# Downloaded by scripts/fetch_weights.py into g1_camera/models/<basename>.
+hf_repo: Mattewkang/Abstraction_experiment-camera-models
+hf_revision: 89ce8b5a32d3f121ec10654e510bbcd65acd7f42
+weights:
+  button_classifier:
+    filename: button_cls.pt
+    sha256: 68226260160a304f42ee1c8f2976e3d0ea27c9b74207b5150ae85ad06d1c23e6
+  elevator_bottle:
+    filename: find_elevator_bottle.pt
+    sha256: 75ca47dd169ed70e9cb595ac73f80ecc4bc700d28af64dadf97c4d00bb0ba82e
+  unified_detector:
+    filename: unified_detector_yolo11s.pt
+    sha256: 6cec24430e0ce3c19ea8d88333e5cd5156da5f85b08c186dd09c8c38652ce370
+  unified_classifier:
+    filename: unified_classifier_yolo11s_cls.pt
+    sha256: 4b8b270cedae1af90603e715f727a38b5e91adc0bf7df5f8db50cd25f455b014

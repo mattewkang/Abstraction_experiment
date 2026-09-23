@@ -1,0 +1,3 @@
+# Model weights are pulled from Hugging Face Hub by scripts/fetch_weights.py
+# (see config/model_weights.yaml). Do not commit the downloaded files.
+models/

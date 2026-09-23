@@ -1,0 +1,55 @@
+# g1_grasp_ros - Python 依赖（Python 3.10, conda env: g1_intellect_env）
+# 来源：g1_intellect 仓库顶层 requirements.txt。
+# 精简版改动：只保留本工程三个包用到的 pin；裁掉 filterpy（跟踪）、
+# faster-whisper/sounddevice（语音）、pycryptodomex/python-gnupg（rosbag）。
+# 另需：pip install -e external/unitree_sdk2_python（DDS 控臂 SDK）。
+
+# Deep Learning & Vision (CUDA 11.8)
+# g1_camera 的 YOLO 检测器 + g1_arm_abs 的 MLP IK 共用。numpy 固定 2.x ABI：
+# ultralytics 8.3 / torch 2.4 均按 numpy 2 构建，且 g1_camera 自带的
+# cv_bridge 替代实现依赖 numpy 2 的字节语义，不得降到 2.0 以下。
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.4.1
+ultralytics==8.3.225
+opencv-python==4.12.0.88
+numpy==2.2.6
+
+# Voxel A* kernels (g1_arm_abs).
+# voxel_numba_kernels.py JIT-compiles the 5D A* / priority-A* / OR-reduce
+# kernels that VoxelObstacleAStar invokes from arm_node_abs's
+# plan_grasp_from_point and PlanToPose. Without numba, voxel_phase4_astar
+# falls through to a stub that raises "numba A* priority kernel not
+# available" on the first plan call. numba >=0.61 is the lowest line that
+# accepts numpy 2.x; pip resolves llvmlite transitively.
+numba>=0.61
+# scipy 为可选：voxel_planner_adapter.py 的深度中值滤波
+# (~voxel_obstacle_depth_median_filter) 用到 scipy.ndimage.median_filter，
+# 缺失时自动回退为原始深度（仅打一条 warning）。原仓库 requirements 未
+# 单独 pin scipy（通常由 torch/numba 传递装上），此处保持一致不强制。
+
+# MLP IK scaler unpickle (g1_arm_abs).
+# nn_backend.py / solve_grasp_pose.py 通过 joblib.load() 反序列化
+# sklearn StandardScaler（x_scaler.pkl），版本需与训练侧一致；
+# 小版本不匹配会在每次节点启动时报 InconsistentVersionWarning。
+scikit-learn==1.7.2
+
+# Config Parsing (weight manifests)
+pyyaml==6.0.3
+
+# Hugging Face Hub client（两个 fetch_weights.py + 启动时权重校验）。
+# 私有仓库需要 read token：`hf auth login` 或环境变量 HF_TOKEN。
+huggingface_hub>=1.0,<2.0
+
+# DDS Communication (unitree_sdk2_python)
+cyclonedds==0.10.2
+
+# BrainCo Revo2 dexterous hand SDK (g1_hands).
+bc_stark_sdk==1.5.1
+
+# ROS Noetic build-time deps（在 conda env 内 catkin_make 时需要）。
+# empy 必须固定 3.3.4；empy 4.x 会破坏 Noetic 的 em.py 用法。
+empy==3.3.4
+catkin_pkg
+rospkg
+defusedxml
+netifaces

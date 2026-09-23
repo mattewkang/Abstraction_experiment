@@ -1,0 +1,17 @@
+<launch>
+    <!--
+    Right-hand node. Services appear under
+    /g1_hand_right/{pre_grasp, grasp_5f, release, point_gesture, grasp_berry, pre_grasp_berry}.
+    Port + slave_id are args so the dual-hand launch can override them.
+    -->
+    <arg name="port"     default="/dev/ttyUSB1"/>
+    <arg name="slave_id" default="127"/>
+
+    <node pkg="g1_hands"
+          type="revo2_tactile_node.py"
+          name="g1_hand_right"
+          output="screen">
+        <param name="port"     value="$(arg port)"/>
+        <param name="slave_id" value="$(arg slave_id)"/>
+    </node>
+</launch>
